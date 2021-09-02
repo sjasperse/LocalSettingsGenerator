@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace LocalSettingsGenerator.Models
 {
     public class LocalSettingsFile

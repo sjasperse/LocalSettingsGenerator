@@ -8,6 +8,7 @@ using LocalSettingsGenerator.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using LocalSettingsGenerator.SourceProviders;
+using Microsoft.Extensions.Configuration;
 
 namespace LocalSettingsGenerator
 {
@@ -22,41 +23,53 @@ namespace LocalSettingsGenerator
 
         static async Task MainAsync()
         {
-            var localSettingsFilePath = Path.Join(Environment.CurrentDirectory, "local-settings.json");
+            var output = new Output();
 
-            if (!File.Exists(localSettingsFilePath))
-            {
-                Console.Error.WriteLine($"Could not find {localSettingsFilePath}");
-                Environment.Exit(1);
-            }
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Environment.CurrentDirectory)
+                .AddJsonFile("local-settings.json")
+                .Build();
 
-            var localSettingsFileContents = File.ReadAllText(localSettingsFilePath);
-
-            var localSettingsModel = JsonSerializer.Deserialize<LocalSettings>(localSettingsFileContents, new JsonSerializerOptions()
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip
-            });
+            var localSettingsModel = config.Get<LocalSettings>();
 
             var services = new ServiceCollection();
             services.AddLogging(options => {
                 options.AddSimpleConsole();
-                options.SetMinimumLevel(LogLevel.Information);
+
+                options.AddConfiguration(config.GetSection("logging"));
+                    
+            });
+            services.Configure<LoggerFilterOptions>(options => {
+                if (options.Rules.Any()) return;
+
+                options.AddFilter(logLevel => logLevel >= LogLevel.Warning);
             });
             services.AddHttpClient();
             services.AddSourceProviders();
             services.AddSingleton<AzureClient>();
             services.AddSingleton<FileProcessor>();
-            services.AddSingleton< Azure.Core.TokenCredential, Azure.Identity.AzureCliCredential>();
+            services.AddSingleton<Azure.Core.TokenCredential>(new Azure.Identity.DefaultAzureCredential(false));
             var serviceProvider = services.BuildServiceProvider();
-            
-            var sources = await SourceFactory.CreateAllAsync(localSettingsModel.Sources, serviceProvider);  
 
-            var fileProcessor = serviceProvider.GetRequiredService<FileProcessor>();
-            foreach (var file in localSettingsModel.Files)
+            output.WriteLine("Initializing sources...");
+            output.Indent();
+            var sources = await SourceFactory.CreateAllAsync(localSettingsModel.Sources, serviceProvider, output);  
+            output.Deindent();
+
+            output.WriteLine("Generating Files...");
+            using (output.Indent())
             {
-                await fileProcessor.Process(file, sources, Environment.CurrentDirectory);
-            }    
+                var fileProcessor = serviceProvider.GetRequiredService<FileProcessor>();
+                foreach (var file in localSettingsModel.Files)
+                {
+                    output.WriteLine($"{file.Template}  -->  {file.Target}");
+                    using (output.Indent())
+                    {
+                        await fileProcessor.Process(file, sources, Environment.CurrentDirectory, output);
+                    }
+                }    
+            }
+            output.WriteLine("Finished");
         }
 
         static async Task WaitForDebugger()

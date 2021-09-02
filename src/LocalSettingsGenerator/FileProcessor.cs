@@ -18,7 +18,7 @@ namespace LocalSettingsGenerator
             this.logger = logger;
         }
 
-        public async Task Process(LocalSettingsFile fileDef, IDictionary<string, ISource> sources, string basePath)
+        public async Task Process(LocalSettingsFile fileDef, IDictionary<string, ISource> sources, string basePath, Output output)
         {
             var fileText = await File.ReadAllTextAsync(Path.Join(basePath, fileDef.Template));
 
@@ -28,6 +28,7 @@ namespace LocalSettingsGenerator
                 var matchText = match.Value;
                 var matchStart = match.Index;
                 var matchEnd = matchStart + match.Length;
+                var position = GetPosition(match.Index, fileText);
 
                 var sourceName = match.Groups["Source"].Value;
                 var key = match.Groups["Key"].Value;
@@ -37,7 +38,7 @@ namespace LocalSettingsGenerator
 
                 var value = await source.GetValueAsync(key);
 
-                logger.LogInformation("Replacing on line {line} '{old}' --> '{new}'", GetLineNumber(match.Index, fileText), matchText, value);
+                output.WriteLine($"Line {position.Line}:{position.Column}: '{matchText}'  -->  '{value}'");
 
                 fileText = ReplaceBetweenIndexes(fileText, matchStart, matchEnd, value);
             }
@@ -52,12 +53,12 @@ namespace LocalSettingsGenerator
             return match.Success;
         }
 
-        private int GetLineNumber(int index, string text)
+        private (int Line, int Column) GetPosition(int index, string text)
         {
-            var substring = text.Substring(0, index);
+            var substring = text.Substring(0, index + 1);
             var lines = substring.Split('\n');
 
-            return lines.Length;
+            return (lines.Length, lines.Last().Length);
         }
 
         private string ReplaceBetweenIndexes(string text, int startIndex, int endIndex, string newText)

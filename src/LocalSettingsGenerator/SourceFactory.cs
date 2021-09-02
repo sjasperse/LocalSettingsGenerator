@@ -10,7 +10,7 @@ namespace LocalSettingsGenerator
 {
     public static class SourceFactory
     {
-        public static async Task<IDictionary<string, ISource>> CreateAllAsync(IEnumerable<IDictionary<string, object>> definitions, IServiceProvider serviceProvider)
+        public static async Task<IDictionary<string, ISource>> CreateAllAsync(IEnumerable<IDictionary<string, object>> definitions, IServiceProvider serviceProvider, Output output)
         {
             var context = new SourceProviderContext(serviceProvider);
             var sourceProviders = serviceProvider.GetServices<ISourceProvider>()
@@ -19,7 +19,7 @@ namespace LocalSettingsGenerator
             var sources = new List<ISource>();
             foreach (var definition in definitions)
             {
-                var source = await CreateAsync(definition, sourceProviders, context);
+                var source = await CreateAsync(definition, sourceProviders, context, output);
 
                 sources.Add(source);
             }
@@ -27,12 +27,14 @@ namespace LocalSettingsGenerator
             return sources.ToDictionary(x => x.Name);
         }
 
-        static async Task<ISource> CreateAsync(IDictionary<string, object> definition, IDictionary<string, ISourceProvider> sourceProviders, SourceProviderContext context)
+        static async Task<ISource> CreateAsync(IDictionary<string, object> definition, IDictionary<string, ISourceProvider> sourceProviders, SourceProviderContext context, Output output)
         {
             var providerNames = sourceProviders.Values.Select(x => x.Type).OrderBy(x => x);
 
             var name = definition.GetValueOrDefault("name", caseInspecificKey: true)?.ToString();
             if (string.IsNullOrEmpty(name)) throw new ApplicationException("All sources must all have a name");
+
+            output.WriteLine($"'{name}'...");
 
             var type = definition.GetValueOrDefault("type", caseInspecificKey: true)?.ToString();
             if (string.IsNullOrEmpty(type)) throw new ApplicationException($"Source '{name}' did not have a type specified. Valid types: {string.Join(", ", providerNames)}");

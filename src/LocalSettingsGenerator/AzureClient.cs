@@ -16,7 +16,7 @@ namespace LocalSettingsGenerator
         {
             httpClientTask = azCredential
                 .GetTokenAsync(new Azure.Core.TokenRequestContext(new [] { 
-                    "https://management.azure.com/",
+                    "https://management.azure.com/.default",
                 }), default)
                 .AsTask()
                 .ContinueWith(x => x.Result.Token)
